@@ -1,14 +1,24 @@
 * log
-** 
+** 发送到gmail正常
+*** [2012-12-21 Fri 19:49]
+: python zhumao.py --file test.in -f gift.young.1@gmail.com -t gift.young.1@gmail.com -p "mypass"
+** 准备师大发送，师大pop3接收。gmail pop3不太一样。
+
+
 * 包宇&zhumao python发送邮件，大附件
 ** 编码文件
 ** 折分文件
-** 标记，发送
-** 接收
-** 发送百分比
+** 标记及百分比，发送
+** 避免被服务器视为垃圾邮件发送者
 ** 
+** 检查
 ** 根据标记过滤
 ** 下载并删除
 ** 合并文件
 ** 解码文件
 ** 接收百分比
+** 
+** todo
+** 重发第N个包
+
+
