@@ -7,7 +7,7 @@ __version__ = "zhumao by Young 2012-12-21"
 
 from optparse import OptionParser
 import smtplib
-import quopri
+import base64
 import time
 import sys
 
@@ -16,7 +16,8 @@ p = OptionParser(usage=__usage__, version=__version__, description=__doc__)
 p.add_option("-F", "--file", dest="filename",
                   help="file need to be sent", metavar="FILE", default="test.in")
 p.add_option("-S", "--smtp", dest="smtp",
-                  help="smtp server", metavar="SMTP_SERVER", default="smtp.nenu.edu.cn")
+             help="smtp server", metavar="SMTP_SERVER", default="smtp.nenu.edu.cn")
+#             help="smtp server", metavar="SMTP_SERVER", default="smtp.gmail.com")
 p.add_option("-f", "--from", dest="fromaddr",
                   help="mail sender", metavar="FROM")
 p.add_option("-p", "--password", dest="password",
@@ -26,7 +27,7 @@ p.add_option("-t", "--to", dest="to",
 p.add_option("-s", "--size", dest="size",
                   help="size of each mail", metavar="SIZE", default=100)
 p.add_option("-L", "--subject", dest="subject_prefix",
-                  help="the prefix of mail subject", metavar="subject_prefix", default='zhumao_baoyu_mail')
+                  help="the prefix of mail subject", metavar="subject_prefix", default='[zhumao_baoyu_mail]')
 
 (opt, args) = p.parse_args()
 
@@ -35,7 +36,7 @@ file = open (opt.filename, "r")
 s = file.read()
 
 # 编码文件
-s = quopri.encodestring(s, 1)
+s = base64.standard_b64encode(s)
 ## sys.stdout.write(s)
 
 # 折分文件
@@ -44,15 +45,18 @@ for i in xrange(0, end, opt.size):
     current = s[i:i+opt.size]
 # 标记
     sleep = 0.1
-    subject = opt.subject_prefix + ' ' +str(i/opt.size)+'/'+str(end/opt.size)
+    subject = opt.subject_prefix + ' ' +str(i/opt.size+1)+'/'+str(end/opt.size+1)
     to = opt.to
     user = opt.fromaddr
     pwd = opt.password
     smtp = opt.smtp
     header = 'To:' + to + '\n' + 'From: ' + user + '\n' + 'Subject:' + subject +' \n'
+    current = 'BODY_START:' + current + '\n' + 'BODY_END:NOTHINGGOESHERE'
     print
     print header
+#发送
     smtpserver = smtplib.SMTP(smtp)
+#    smtpserver = smtplib.SMTP(smtp, 587) # for gmail
     smtpserver.ehlo()
     smtpserver.starttls()
     smtpserver.ehlo
@@ -62,7 +66,7 @@ for i in xrange(0, end, opt.size):
     print   'sent.'
     smtpserver.close()
     time.sleep(sleep)
-#发送
+
 
 
 
