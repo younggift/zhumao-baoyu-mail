@@ -111,7 +111,6 @@ server.quit()
 #  合并文件
 s=""
 for k in xrange(1, all_number+1, 1):
-    print "LEN:"+str(len(d[k]))
     s += d[k]
 
 #  解码文件
