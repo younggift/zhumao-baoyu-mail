@@ -1,0 +1,595 @@
+用邮件分割和传送大文件，python实现 I
+
+1. 限制和解决方案
+
+经常有人替我国导演和科幻作者们叫屈，说这样的环境怎么能出好作品呢；也经常有人为自己叫屈，类似他有这样的父母环境怎么能成才呢。不过，我看过一个故事，说法略有不同，名字忘了，应该还是个名篇。
+
+故事里说，有个家伙因为被抢劫，捆得很结实，而又刚刚好能动弹一点，能一跳一跳地走。他被救以后，发现能演小丑什么的，留在马戏团工作。因为绳子约束，力量更大，而且能做很多原来完不成的动作。最后，老板想杀他放出狼来，他做好准备放手一搏，觉得胜券在握。老板娘一刀把他身上的绳子割了，喊"那谁，你快跑啊。"然后就没有然后了。这哥们离了绳子啥也不是，后来是不是被狼咬死，我就忘了。
+
+这个故事告诉我，限制从来不一定是致命的阻碍，有时更可能是个磨砺人的挑战。
+
+
+包师弟和ZHUMAO聊，说到某单位的网络真是不咋地，下载居然要收费，不过有个漏洞。包师弟说，这个漏洞就是下载邮件的流量不算钱。
+
+这倒是也合理，不然就往网络中心或领导的信箱里成天发大附件就行了。同时，从原理上也说得过去，SMTH的时候，不是我乐意的，相当于接听电话不收费；而POP3的时候，已经是内网了。
+
+ZHUMAO说，这个漏洞可用。他提到，先把大文件切成几份，然后用邮件发给包师递，包师弟根据一定条件收邮件，然后拼起来。
+
+我说：你们应该用PYTHON整。ZHUMAO说：对，你整吧。
+
+于是我就整了。没有写容错部分，一共197行，拿出来讨论一下。
+
+2. 整体框架
+
+整个软件分成两部分，是两个.py文件。一个是发送文件用的，名字叫 zhumao.py，另一个是收文件用的，名字叫 baoyu.py。
+
+2.1 zhumao.py
+
+发文件的zhumao要顺序执行这样一些操作：
+
+* 编码文件
+
+用base64或可打印字符，因为邮件是ASCII文本的，而大部分二进制文件都有ASCII控制字符，比如电影。之所以编码，另一个原因是我不想使用附件，实现的时候更麻烦一些，以后也可以改成用附件。
+
+* 拆分文件
+
+把文件拆成定长的几段，比如10K一段，然后再发送。最后一段可能稍微短一些。
+
+* 标记及百分比，发送
+
+在邮件的subject上做标记，比如 [来自zhumao，好片子] 这样包师弟接收的时候过滤邮件更容易一些。
+
+然后找个SMTH邮件服务器发出去。
+
+* 避免被服务器视为垃圾邮件发送者
+
+邮件服务器可能会因为你一直发一直发认为你是恶意的，所以发一会要 sleep一会儿。对软件性能的影响，就是没有办法的事了。
+
+2.2 baoyu.py
+
+收文件这一端，要执行相反的操作，即顺序执行：
+
+* 检查
+
+用POP3检查所有的邮件头。
+
+* 根据标记过滤，下载并删除
+
+把符合条件的邮件，比如 [来自zhumao，好片子]，下载下来，从服务器端删除。在这里，以后应该支持错误检校，出错重传。现在还没有支持，作为原型，就算对付吧，如果1G文件中间有一个坏的，就得重传全部。
+
+* 合并文件
+
+把文件从邮件body中析出来，然后拼成编码的文件。有些邮件服务器会在subject 之后加上乱糟的东西，比如 anti-spam 之类的，这破坏了一个通常的假设，即subject之后一行以后全是正文。这导致析出文件稍微麻烦一些。我为了实现简单，在body的最前面加了标记，后面也加了标记。反正邮件不是用人手，而是用zhumao.py发出的，所以这一部分可以视为 zhumao-baoyu 协议。
+
+* 解码文件
+
+把ascii文件解码为binary。
+
+* 接收百分比
+
+还要显示接收了多少。同时，因为邮件到达顺序可能与发送的不同，所以zhumao.py在发送的时候还在 subject 中还加入了共几包，当前这封邮件是第几包。
+
+2.3 实现
+
+列出上述框架以后，我先写zhumao.py，用 thunderbird 和 gmail 检验发送的内容；然后再写 baoyu.py，此时用已经实现的zhumao.py发送测试用例。因为我不熟悉python，很多语法和底层的机制 (如分割字符串) ，都是一边写一边查的。估计有更优雅的实现方案，不过那就不是我这样的初学者能提供的了。
+
+所以，大牛们读到此处，已经可以评判 zhumao-baoyu 方案了。初学者们请明天再来，我们继续一起学习吧。
+
+此外，这个zhumao-baoyu草稿在计算机网络中也可以视为 smtp-pop3 协议基础上实现的文件传递协议，还可以扩展更多的功能，比如 baoyu 要求列出 zhumao端 提供的文件目录，选择文件下载。在协议之上建立新的协议，VPN中的l2tp、WAN口连接使用的 PPPoE，都与此类似，称为隧道协议。
+
+在隧道协议中，表面上我们谈论的是一件事情，而实际上，我们真正想传递的，往往另有深意。就像年终岁尾，大家喝酒的时候，逼你喝酒的那些人，他表达的是："你应该表达臣服于我，低个头啥的。"请脑补雄性大猩猩拍胸脯的动作。
+
+突然想起来北京土著喜欢自称为"爷"的习惯，还有四川土著喜欢口头对别人的"婆娘"不敬这两件事，他们可能还会解释为"啊呀，我就是习惯了，没有恶意。"明知对方的感受，不郑重道歉的就是恶意。坏习惯是病，如果能改就改，如果不能改，就得治。我对四川同学说过，你说别人的媳妇啥都行，对我得例外。期待机会哪天对哪位北京同学喊一嗓子，你TM是谁的爷。
+
+终于还是跑题了。
+
+用邮件分割和传送大文件，python实现 II
+
+3. 软件的使用过程
+
+下面这段，是软件写完以后运行的效果，不过，在软件开始写以前，它的样子就已经在我的心中。用个去年还是前年流行然后就消声匿迹的词来形容，软件在写第一行代码以前，就应该有个"愿景"。
+
+以下，以发送191字节的 test.in 为例，分成3个包，每包100字节。从young@nenu.edu.cn发出，发给young@nenu.edu.cn。每包100字节是参数的默认值指定的。
+
+3.1. 发送方zhumao
+
+~/running/zhumao-baoyu-mail $ python zhumao.py -f young@nenu.edu.cn -t
+young@nenu.edu.cn -L "[test-in]" -p "mypass***" -F test.in
+
+To:young@nenu.edu.cn
+From: young@nenu.edu.cn
+Subject:[test-in] 1/3
+
+sent.
+
+To:young@nenu.edu.cn
+From: young@nenu.edu.cn
+Subject:[test-in] 2/3
+
+sent.
+
+To:young@nenu.edu.cn
+From: young@nenu.edu.cn
+Subject:[test-in] 3/3
+
+sent.
+
+3.2 接收方baoyu
+
+~/running/zhumao-baoyu-mail $ python baoyu.py -u young@nenu.edu.cn -p "mypass***" -L "[test-in]" -f young@nenu.edu.cn -F test.out
++-------------------------
+|1 [test-in] 3/3
++-------------------------
+3/3
++-------------------------
+|2 [test-in] 2/3
++-------------------------
+2/3
++-------------------------
+|3 [test-in] 1/3
++-------------------------
+1/3
+
+以上接收过程可以看到，一共3包，第3包的接收早于第2包，早于第1包。
+
+用diff对比发送和接收到的文件，一致。
+
+~/running/zhumao-baoyu-mail $ diff test.in test.out
+~/running/zhumao-baoyu-mail $
+
+3.3. 手册，帮助
+
+$ python zhumao.py --help
+Usage: %zhumao.py [--help]
+
+Options:
+  --version             show program's version number and exit
+  -h, --help            show this help message and exit
+  -F FILE, --file=FILE  file need to be sent
+  -S SMTP_SERVER, --smtp=SMTP_SERVER
+                        smtp server
+  -f FROM, --from=FROM  mail sender
+  -p PASSWORD, --password=PASSWORD
+                        password
+  -t TO, --to=TO        mail receiver
+  -s SIZE, --size=SIZE  size of each mail
+  -L subject_prefix, --subject=subject_prefix
+                        the prefix of mail subject
+
+$ python baoyu.py --help
+Usage: %baoyu.py [--help]
+
+Options:
+  --version             show program's version number and exit
+  -h, --help            show this help message and exit
+  -F FILE, --file=FILE  file need to be saved
+  -P POP3_SERVER, --pop=POP3_SERVER
+                        pop3 server
+  -u USER, --user=USER  user name
+  -p PASSWORD, --password=PASSWORD
+                        password
+  -f FROM, --from=FROM  from whom to be filtered
+  -L subject_prefix, --subject=subject_prefix
+                        the prefix of mail subject as filter
+
+4. 发送方zhumao
+
+以下是发送方zhumao.py的代码及讨论。希望能为像我一样的初学者带来启发的同时，渴望熟悉python什么的大牛们指导和批评我代码的各种错误，一方面我求进步，另一方面也免得我误导别人。谢谢啦。
+
+这两天又访问不了github了，所以暂时没传上去。各位将就着看吧。
+
+不连续的行号，是空行，我解释的时候略过了。
+
+4.1 基本相当于导言
+
+1 #! /usr/bin/python
+2 # -*- coding: utf-8 -*-
+3 
+4 # zhumao，邮件发送者
+
+第1行，注释，指定脚本解释器。这和shell程序设计是一个路子。
+
+第2行，注释，文件编码。祖国尚未统一世界，看来各种编码的乱像还会继续相当
+长时间。
+
+5 __usage__ = "usage: %zhumao.py [--help]"
+6 __version__ = "zhumao by Young 2012-12-21"
+
+我照抄的，看效果是显示使用方法。这个实现有意思，方便程序员与用户沟通啊。增加一点方便，估计就多几个百分比的程序员实现这一功能。
+
+8 from optparse import OptionParser
+9 import smtplib
+10 import base64
+11 import time
+12 import sys
+
+我猜就是 C里的include，猜的。还有名字空间、模块这样的作用。from的作用，似乎是使得模块中的符号名在当前作用域可见。这些模块是后面的代码要用到的。
+
+4.2 命令行解析
+
+这里使用了
+
+8 from optparse import OptionParser
+
+中指定的模块，第15行中的p是个OptionParser实例。在第16行以后，调用实例的方法 p.add_option。这些参数，基本可以根据出现的顺序、内容，与上述"愿景"对比，猜出来含义。不赘述。
+
+14 # 命令行解析
+15 p = OptionParser(usage=__usage__, version=__version__, description=__doc__)  
+16 p.add_option("-F", "--file", dest="filename",
+17                   help="file need to be sent", metavar="FILE", default="test.in")
+18 p.add_option("-S", "--smtp", dest="smtp",
+19              help="smtp server", metavar="SMTP_SERVER", default="smtp.nenu.edu.cn")
+20 #             help="smtp server", metavar="SMTP_SERVER", default="smtp.gmail.com")
+21 p.add_option("-f", "--from", dest="fromaddr",
+22                   help="mail sender", metavar="FROM")
+23 p.add_option("-p", "--password", dest="password",
+24                   help="password", metavar="PASSWORD")
+25 p.add_option("-t", "--to", dest="to",
+26                   help="mail receiver", metavar="TO")
+27 p.add_option("-s", "--size", dest="size",
+28                   help="size of each mail", metavar="SIZE", default=100)
+29 p.add_option("-L", "--subject", dest="subject_prefix",
+30                   help="the prefix of mail subject", metavar="subject_prefix", default='[zhumao_baoyu_mail]')
+31 
+32 (opt, args) = p.parse_args()
+
+到这里为止，命令行参数 (及其默认值)就已经成为p的成员了。后面这样引用，比如： opt.smtp。
+
+第32行，这个返回值对C程序员来说，看起来有点奇特。手册[http://docs.python.org/2/library/optparse.html]说
+
+"parse_args() returns two values:
+
+options, an object containing values for all of your options—e.g. if
+--file takes a single string argument, then options.file will be the
+filename supplied by the user, or None if the user did not supply that
+option args, the list of positional arguments leftover after parsing
+options"
+
+4.3 输入文件
+
+34 # 输入文件
+35 file = open (opt.filename, "r")
+36 s = file.read()
+
+第35行，opt.filename是从命令行中解析出来的，在我们的"愿景"中，就是test.in。
+
+open, read，这样的写法，容易望文生义，而且似乎也对，不赘述。执行完这段以后，文件的内容全在s中了。
+
+4.4 编码文件
+
+38 # 编码文件
+39 s = base64.standard_b64encode(s)
+40 
+41 ## sys.stdout.write(s)
+
+第39行，使用了 base64编码 字符串s，编码的结果再赋值给s。
+第41行是我写程序的时候用来输出测试的。
+
+4.5 准备发送，登录
+
+43 # 准备发送，登录
+44 sleep = 1
+45 to = opt.to
+46 user = opt.fromaddr
+47 pwd = opt.password
+48 smtp = opt.smtp
+
+第44行，准备每发送一包睡一秒。根据你用的SMTP服务器对你的坏人判断有多严厉，你可以调整sleep的值。
+
+从第45行至第48行，从命令行解析的结果中得到 发给谁、发送者、SMTP发送者的口令、SMTP服务器地址。
+
+49 smtpserver = smtplib.SMTP(smtp)
+50 #    smtpserver = smtplib.SMTP(smtp, 587) # for gmail
+51 smtpserver.ehlo()
+52 smtpserver.starttls()
+53 smtpserver.ehlo
+54 smtpserver.login(user, pwd)
+
+第49行使用smtplib，构造出smtpserver实例。如果用的是gmail，端口需要指定为587。
+
+从第51行到第54行，根据你选的smtp服务器的要求决定对它说些啥。我的smtp服务器要求先 扩展的hello，然后tls架密，然后再问候一次，然后登录。如果不知道应该说些啥，可以用thunderbird登录一次，用sniffer看一下正确的步骤。
+
+4.6 拆分-标记-发送
+
+麻烦的地方到了。
+
+4.6.1 拆成
+
+56 # 折分文件
+57 end = len(s)
+58 for i in xrange(0, end, opt.size):
+59     if i+opt.size < end :
+60         current = s[i:i+opt.size]
+61     else:
+62         current = s[i:]
+
+python的for循环语法，我老是忘。希望这回能记住。
+
+"for 变量 in 待遍历的东西 : "。
+
+这里，待遍历的东西是一个数据范围，用xrange生成，从0开始，到end结束，步
+进为 opt.size。
+
+在循环体中--这也是python有意思的一个地方，缩进是语法要求，而不仅是为了美观--如果没有到最后一包，当前的这包就是字符串切割出来的。s[i:i+opt.size]表示切割s，从 i 切到 i+opt.size；如果不是最后一包，从i切到结尾，写作 s[i:]。
+
+python切割字符串的方法，还真是有C的风格，把字符串当成纯粹的容器/数组看待。
+
+4.6.2 标记
+
+还在循环里。
+
+63 # 标记
+64     subject = opt.subject_prefix + ' ' +str(i/opt.size+1)+'/'+str(end/opt.size+1)
+65     header = 'To:' + to + '\n' + 'From: ' + user + '\n' + 'Subject:' + subject +' \n'
+66     current = 'BODY_START:' + current + '\n' + 'BODY_END:NOTHINGGOESHERE'
+67     print
+68     print header
+
+第64行，生成主题subject，第65行，生成邮件头header，第66行，生成正文。
+
+第67和第68行，不是为了调试，而是为了避免用户在长时间切割的时候不知道跑了多远，还剩多远。
+
+这里输出的东西就是下面这段：
+
+To:young@nenu.edu.cn
+From: young@nenu.edu.cn
+Subject:[test-in] 2/3
+
+sent.
+
+其中，主题里的 [test-in] 是加的标记，包师弟接收的时候可以用这个标记过滤出我们特别的邮件。太阳底下无新鲜事，大毅同学提到在cisco设备中，vlan/trunk也使用了类似的方法做标记tag。后面的2/3表示共3包，这是第2包，用来在baoyu接收端拼接文件的时候作为顺序的依据，也用来显示出来，避免包师弟了解下载了多少，还有多少没下载。
+
+4.6.3 发送
+
+还在循环里。
+
+69 #发送
+70     msg = header + current
+71     smtpserver.sendmail(user, to, msg)
+72     print   'sent.'
+73     time.sleep(sleep)
+74 
+75 smtpserver.close()
+
+第70行，把邮件头和邮件正文拼在一起。这看起来是很天真的做法，邮件头和正文就这么就拼一起了啊？是的，是SMTP还是什么协议，就是这么规定的。好像head和body中间还有个回车。
+
+第71行，发送出去了。
+
+第72行，避免用户心急，程序把邮件发出去了要告诉用户一声。
+
+第73行，前面提到了，睡一下，避免SMTP服务器认为我们是发送垃圾邮件的坏人。
+
+第75行，离开循环，邮件都发送完了，断开连接。做事要有始有终，保持优雅。
+
+明天，或者后天，讨论一下接收端baoyu.py。
+
+
+用邮件分割和传送大文件，python实现 III
+
+4. 接收端baoyu
+
+4.1 导言和import
+
+这部分，是从zhumao.py中抄过来的。
+
+1 #! /usr/bin/python
+2 # -*- coding: utf-8 -*-
+3 
+4 # baoyu, 邮件接收者
+5 __usage__ = "usage: %baoyu.py [--help]"
+6 __version__ = "baoyu by Young 2012-12-21"
+7 
+8 from optparse import OptionParser
+9 import base64
+10 import time
+11 import sys
+12 import poplib
+13 import time
+14 from email.Parser import Parser
+15 from email.header import decode_header
+16 
+
+4.2 helper函数们
+
+这里是一些在后面的业务逻辑实现中要调用的一些函数。它们在此声明和定义，定义的方式一般应依据动机、目的，而不是根据实现手段。也就是说，使用的词汇应该是分析阶段的词汇。函数被从"后面的业务逻辑"中抽取到这里，可能因为被调用很多次，也可能只调用一次，但是在业务上具有较为鲜明的特征。如果调用很多次，抽取出来的原因之一就是重用，这样可以避免后续维护的时候一旦有修改需求，这个功能相关的很多地方都要修改；如果只调用一次，但是业务特征明显，就是为了信息隐藏，以后或别人读代码的时候要容易一些。
+
+根据场合和组织方式的差异，这些函数有不同的称呼。在C++/java中，私有函数基本上实现了这样的功能；在flex/bison及我一时没想起来的很多领域中，它们被称为helper函数。
+
+17 ######
+18 # helpers
+19 ######
+20 def getheader(header_text, default="ascii"):
+21     """Decode the specified header"""
+22     try:
+23         headers = decode_header(header_text)
+24         header_sections = [unicode(text, charset or default)
+25                            for text, charset in headers]
+26         return u"".join(header_sections)
+27     except:
+28         return u"".join("invalidated encode")
+29 
+
+上面的代码是从某位貌似日本人的站点上抄来的，它的名字其实不应该叫做getheader，而是"根据charset解码"邮件头或正文。
+
+30 def get_msg(which):
+31     return "\n".join(server.top(which, 1)[1])
+
+这是根据 which指定的邮件id号，从邮件服务器上取得对应的邮件，但是不删除。server.top()。详见手册[http://docs.python.org/2/library/poplib.html]，"POP3.top(which, howmuch)"。
+
+33 def get_from(msg):
+34     email = parser.parsestr(msg)
+35     return email.get("From")
+
+上述的 pserser 就是 第14行 "from email.Parser import Parser" 中的Parser的实例，在下面的第82行。手册[http://docs.python.org/2/library/email.parser.html]。这个parser是专门用来从邮件中析出邮件头部等各个部分的。
+
+第35行，解析出From部分，也就是邮件发送者地址。baoyu.py根据这个来判断某封邮件符合"zhumao-baoyu"协议的发送者部分。
+
+这个粗糙的协议包括：发送者、邮件主题、第几封邮件、共几封。其中，发送者和邮件主题作为下载和删除邮件的过滤条件。
+
+37 def get_body(which):
+38     msg = "\n".join(server.retr(which)[1])
+39     email = parser.parsestr(msg)
+40     return email.get("BODY_START")
+
+与第33行开始的函数类似，get_body用于取得which指定的id对应的邮件的body。不同的是，get_body把这封邮件标记为已读。
+
+此外，上文提到，我们为了解析方便，在body的开头标记了"BODY_START:"，所以此处，body可以视为"BODY_START"部分的值。
+
+42 def get_subject(msg):
+43     return getheader(parser.parsestr(msg).get("Subject"))
+
+还是与第33行开始的函数类似，取主题部分。
+
+45 # e.g. [base64-2] 1/2 
+46 def get_cur_num(subject, subject_prefix):
+47     start = subject.find(opt.subject_prefix)+len(opt.subject_prefix)
+48     slash = subject.find('/', start)
+49     return int(subject[start:slash])
+
+51 def get_all_num(subject, subject_prefix):
+52     start = subject.find(opt.subject_prefix)+len(opt.subject_prefix)
+53     slash = subject.find('/', start)
+54     return int(subject[slash+1:])
+
+以上两个函数，是从邮件头里取得这是第几个包、一共几个包这两个数据，使用的方法是字符串处理，以"/"分割类似"[base64-2] 1/2"的邮件头部。
+
+4.3 命令行解析
+
+与发送端zhumao.py的命令行解析类似，解释从略。
+
+57 #--------------------------------------------------------------------
+58 # 命令行解析
+59 p = OptionParser(usage=__usage__, version=__version__, description=__doc__)  
+60 p.add_option("-F", "--file", dest="filename",
+61              help="file need to be saved", metavar="FILE", 
+62              default="test.out")
+63 p.add_option("-P", "--pop", dest="pop",
+64              help="pop3 server", metavar="POP3_SERVER", 
+65              default="pop3.nenu.edu.cn")
+66 p.add_option("-u", "--user", dest="user",
+67              help="user name", metavar="USER")
+68 p.add_option("-p", "--password", dest="password",
+69              help="password", metavar="PASSWORD")
+70 p.add_option("-f", "--from", dest="fromaddr",
+71              help="from whom to be filtered", metavar="FROM",
+72              default='gift.young.1@gmail.com' )
+73 p.add_option("-L", "--subject", dest="subject_prefix",
+74              help="the prefix of mail subject as filter", metavar="subject_prefix",
+75              default='[zhumao_baoyu_mail]')
+76 
+77 (opt, args) = p.parse_args()
+78 
+
+4.4 准备连接邮件服务器
+
+82 parser = Parser()
+83 server = poplib.POP3(opt.pop)
+84 server.user(opt.user)
+85 server.pass_(opt.password)
+86 server.set_debuglevel(0)
+87 sleep = 0.1
+88 count = server.stat()[0]
+89 d = dict()
+
+使用pop3接收，各种参数设置。
+
+第88行，取得stat命令时的邮件数量，即未读邮件数量。
+
+第89行，初始化一个字典 (映射)。后面准备把第1封邮件放到"1"的值里面，第2封邮件放到"2"的值里面，依此类推。这样，在拼邮件的时候，可以按key排序。
+
+4.5 接收邮件
+
+检查邮件，根据邮件头过滤，下载并删除符合要求的邮件，显示接收百分比。
+
+从第90行到第107行，是一个循环，用于遍历所有邮件，并在第103行当查找到所有符合要求的邮件 (数量达到要求)以后跳出循环。
+
+90 for i in xrange(1, count, 1):
+91     current = get_msg(i)
+
+调用helper函数 get_msg，取得id为i的邮件 (的邮件头和body第一行) 。
+
+92     if (get_from(current).find(opt.fromaddr) != -1 and 
+93         get_subject(current).find(opt.subject_prefix) != -1):
+94         b = get_body(i)
+
+如果邮件的发送者符合要求 (比如 zhumao@nenu.edu.cn) ，并且主题的prefix也符合要求 (比如 [base64-2])，取整封邮件。
+
+如果不过滤直接在遍历的时候取整封邮件，因为邮件数量众多，带附件的邮件又很大，性能会比较低。而仅遍历邮件头，对网络带宽就没有那么高的要求了。
+
+95         print '+-------------------------'
+96         print '|' + str(i)+' '+ get_subject(current)
+97         # print '|' + b
+98         print '+-------------------------'
+
+显示进度，避免用户着急。
+
+99         current_seq = get_cur_num(get_subject(current), opt.subject_prefix)
+100         all_number  = get_all_num(get_subject(current),opt.subject_prefix)
+
+调用helper函数，取得当前是这一文件的第几包邮件 和 一共几包邮件。一共几句邮件，数值在遍历中一直不会变，但是重复计算了很多次。
+
+101         print (str(current_seq) +'/'+ str(all_number))
+
+再显示进度，第几封，共几封。
+
+102         d [current_seq] = b
+
+把第N封邮件放到字典键N的位置。参见前面提到的第89行，这里是向字典中插入数据。
+
+103         if len(d) >= all_number :
+104             break
+106     else:
+107         print 'filtered out: '+str(i)+'/'+str(count)+' '+get_subject(current)
+
+如果把这个文件对应的所有邮件都已下载完毕，跳出循环；否则的话，也告诉用户一声，这封邮件不符合条件，不然出现大量不符合条件的邮件时，用户看到的是程序假死。
+
+109 server.quit()
+
+收完邮件，关闭连接，保持优雅。
+
+4.6 合并文件
+
+111 #  合并文件
+112 s=""
+113 for k in xrange(1, all_number+1, 1):
+114     s += d[k]
+115 
+
+接key的顺序遍历字典d，把对应的值拼接在一起。这个对应的值来自第102行的插入，此处是取出数据。字典d综上所述，在第89行初始化，在第102行插入数据，在第114行读取使用。如果不用字典，而使用一个链表，以下标代替key，也可以。
+
+4.7 解码文件
+
+我们拼接出来的文件是base64编码的，所以需要解码，然后写出。
+
+116 #  解码文件
+117 s = base64.standard_b64decode(s)
+118 
+119 file = open (opt.filename, "w")
+120 file.write(s)
+
+5. 回顾数据流
+
+发送端的数据流为： 文件binary -> 读入文件 -> base64编码 -> cut -> smtp.
+
+接收端的数据流为：pop3 -> merge -> base64解码 -> 写出文件 -> 文件binary。
+
+如果思想的传递，也能无误地这样传输，该有多好。
+
+6. 进一步的工作
+
+还有很多进一步的工作可以做，让这个协议及应用程序更好一些。比如，加错误检校，指定重传错误的包而不是全部重传，由baoyu访问zhumao的共享目录并指定下载某个文件，不使用SMTP/POP3而是通过论坛的贴子传递信息。
+
+还可以在传送前加压缩 (不过对于视频和音频，没啥意义)。
+
+还可以用这种隧道做成反向代理……
+
+未来有无数种可能。可能这正是人生的迷人之处，如果今天就能看到明天及所有以后的日子，那还有什么希望可言。
+
+完整代码在这里 [http://my.csdn.net/my/code/detail/33574] 和
+[http://my.csdn.net/my/code/detail/33573].
+
+
+from 
+[http://blog.csdn.net/younggift/article/details/8434059]
+[http://blog.csdn.net/younggift/article/details/8441516]
+[http://blog.csdn.net/younggift/article/details/8449243]
